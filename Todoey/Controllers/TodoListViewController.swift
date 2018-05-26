@@ -7,40 +7,29 @@
 //
 
 import UIKit
+import CoreData
 
 class TodoListViewController: UITableViewController {
 
     var itemArray = [Item]()
-    let dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("Items.plist")
+    var selectedCategory: Category? {
+        didSet{
+            loadItems()
+        }
+    }
     
-    // We dont need the defaults anymore. We are going to create
-    // our own plist file
+    let dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
     
-    //let defaults = UserDefaults.standard
+    // Get the context from Appdelegate to save the new record
+    // to the persistent container
+    
+    let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
+    
     
     override func viewDidLoad() {
         
         super.viewDidLoad()
-        
-        print(dataFilePath!)
-    
-//        let newItem1 = Item()
-//        newItem1.title = "Cell 1"
-//        itemArray.append(newItem1)
-//        
-//        let newItem2 = Item()
-//        newItem2.title = "Cell 2"
-//        itemArray.append(newItem2)
-//        
-//        let newItem3 = Item()
-//        newItem3.title = "Cell 3"
-//        itemArray.append(newItem3)
-        
-//        if let items = defaults.array(forKey: "ToDoListArray") as? [Item] {
-//            itemArray = items
-//        }
-        
-        loadItems()
+        print(dataFilePath)
        
     }
 
@@ -71,6 +60,11 @@ class TodoListViewController: UITableViewController {
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         //print(itemArray[indexPath.row])
         
+        
+        // Code for removing an item
+        //context.delete(itemArray[indexPath.row])
+        //itemArray.remove(at: indexPath.row)
+        
         itemArray[indexPath.row].done = !itemArray[indexPath.row].done
         saveItems()
         
@@ -90,15 +84,15 @@ class TodoListViewController: UITableViewController {
         let action = UIAlertAction(title: "Add Item", style: .default) { (action) in
             // Include code to respond to the "Add Item" click event
             //print(textField.text!)
+           
+            let newItem = Item(context: self.context)
             
-            let newItem = Item()
             newItem.title = textField.text!
+            newItem.done = false
+            // Link the selected category in the category view to
+            // the newly created item
+            newItem.parentCategory = self.selectedCategory
             self.itemArray.append(newItem)
-            
-            // Since we are not using the defaults, we are commenting the
-            // line below and instead use the saveData() function
-            
-            //self.defaults.set(self.itemArray, forKey: "ToDoListArray")
             
             self.saveItems()
         }
@@ -113,27 +107,70 @@ class TodoListViewController: UITableViewController {
     }
     
     func saveItems() {
-        
-        let encoder = PropertyListEncoder()
         do {
-            let data = try encoder.encode(itemArray)
-            try data.write(to: dataFilePath!)
+            try context.save()
         } catch {
-            print("Error encoding array \(error)")
+            print("Error savinng data \(error)")
         }
         tableView.reloadData()
     }
     
-    func loadItems() {
+    func loadItems(with request: NSFetchRequest<Item> = Item.fetchRequest(), predicate: NSPredicate? = nil) {
+        // Have a default parameter value when none is supplied
         
-        if let data = try? Data(contentsOf: dataFilePath!) {
-            let decoder = PropertyListDecoder()
-            do {
-                itemArray = try decoder.decode([Item].self, from: data)
-            } catch {
-                print("Error deccoding array \(error)")
-            }
+        let categoryPredicate = NSPredicate(format: "parentCategory.name MATCHES %@", selectedCategory!.name!)
+        
+        
+        if let additionalPredicate = predicate {
+            request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [categoryPredicate,additionalPredicate])
+        } else {
+            request.predicate = categoryPredicate
         }
+        
+        do {
+            itemArray = try context.fetch(request)
+        } catch {
+            print("Error fetching context \(error)")
+        }
+        tableView.reloadData()
     }
 }
 
+
+//MARK: Search bar methods
+
+// Extending the TodoListViewController to modularize delegate
+// functions
+extension TodoListViewController:  UISearchBarDelegate {
+    
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+        
+        let request: NSFetchRequest<Item> = Item.fetchRequest()
+        
+        // Make search (c)ase and (d)iacritic insensitive
+        request.predicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)
+        
+        let sortDescriptor = NSSortDescriptor(key: "title", ascending: true)
+        request.sortDescriptors = [sortDescriptor]
+        
+        loadItems(with: request, predicate: request.predicate)
+        tableView.reloadData()
+        
+        //print(searchBar.text!)
+    }
+    
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+        if searchBar.text?.count == 0 {
+            loadItems()
+            
+            // Make sure that the kbd disappears in the
+            // main thread of the app.
+            // Remove the focus from the search bar
+            
+            DispatchQueue.main.async {
+                searchBar.resignFirstResponder()
+            }
+            
+        }
+    }
+}
