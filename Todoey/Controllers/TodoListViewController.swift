@@ -8,11 +8,12 @@
 
 import UIKit
 import RealmSwift
+import ChameleonFramework
 
-class TodoListViewController: UITableViewController {
+class TodoListViewController: SwipeTableViewController {
 
     var toDoItems: Results<Item>?
-    // toDOItems  = array of Results that consistes of Item objects
+    // toDOItems  = array of Results that consists of Item objects
     
     let realm = try! Realm()
    
@@ -24,22 +25,48 @@ class TodoListViewController: UITableViewController {
     
     let dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
     
+    @IBOutlet weak var searchBar: UISearchBar!
+    
     override func viewDidLoad() {
         super.viewDidLoad()
-        print(dataFilePath)
+        tableView.rowHeight = 80.0
+        tableView.separatorStyle = .none
+        //print(dataFilePath)
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        title = selectedCategory?.name
+        guard let colorHex = selectedCategory?.cellBackgroundColor else { fatalError()}
+        updateNavBar(withHexCode: colorHex)
+    }
+    
+    override func viewWillDisappear(_ animated: Bool) {
+        updateNavBar(withHexCode: "26DE90")
+ 
     }
 
     //TODO: Declare cellForRowAtIndexPath here:
+
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        
-        let cell = tableView.dequeueReusableCell(withIdentifier: "ToDoItemCell", for: indexPath)
        
+        let cell = super.tableView(tableView, cellForRowAt: indexPath)
+        
+        
         if let item = toDoItems?[indexPath.row]{
             cell.textLabel?.text = item.title
             cell.accessoryType = item.done == true ? .checkmark : .none
         } else {
             cell.textLabel?.text = "No items added"
         }
+        
+        let categoryColor = selectedCategory?.cellBackgroundColor
+        
+        //if let color = FlatWatermelon().darken(byPercentage: CGFloat(indexPath.row) / CGFloat(toDoItems!.count)) {
+        if let color = UIColor(hexString: categoryColor!)?.darken(byPercentage: CGFloat(indexPath.row) / CGFloat(toDoItems!.count)) {
+            cell.backgroundColor = color
+            cell.textLabel?.textColor = ContrastColorOf(color, returnFlat: true)
+        }
+        
         return cell
     }
 
@@ -115,8 +142,47 @@ class TodoListViewController: UITableViewController {
         toDoItems = selectedCategory?.items.sorted(byKeyPath: "title", ascending: true)
         tableView.reloadData()
     }
-}
+    
+    override func updateModel(at indexPath: IndexPath) {
+        
+        // handle action by updating model with deletion
+        //print("Item Deleted")
+        
+        if let itemForDeletion = self.toDoItems?[indexPath.row] {
+            do {
+                try self.realm.write {
+                    self.realm.delete(itemForDeletion)
+                }
+            } catch {
+                print("Error deleting \(error)")
+            }
+        }
+    }
+    
+    //MARK: - Update Navigation bar methods
+    
+    func updateNavBar(withHexCode colorHexCode: String) {
+        guard let navBar = navigationController?.navigationBar else {
+            fatalError("Navigation controller does not exist")
+        }
+        
+        guard let colorHex = selectedCategory?.cellBackgroundColor else { fatalError()}
+        guard let navBarColor = UIColor(hexString: colorHexCode) else  { fatalError()}
+        
+        navBar.barTintColor = navBarColor
+        navBar.tintColor = ContrastColorOf(navBarColor, returnFlat: true)
+        
+        //        if #available(iOS 11.0, *) {
+        //            navBar.largeTitleTextAttributes = [NSAttributedStringKey.foregroundColor: ContrastColorOf(navBarColor, returnFlat: true)]
+        //        } else {
+        //            // Fallback on earlier versions
+        //        }
+        searchBar.barTintColor = navBarColor
+        
+    }
+    
 
+}
 
 //MARK: Search bar methods
 

@@ -11,6 +11,7 @@ import RealmSwift
 
 class Category: Object {
     @objc dynamic var name: String = ""
+    @objc dynamic var cellBackgroundColor: String = ""
     
     // Define a relationship between category and items
     // Every category is likely to have a list of items
